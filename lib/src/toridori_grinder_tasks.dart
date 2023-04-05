@@ -2,16 +2,23 @@ import 'dart:io';
 
 import 'package:github/github.dart';
 import 'package:grinder/grinder.dart';
+import 'package:http/http.dart' as http;
 import 'package:yaml/yaml.dart';
 
 void addAllTasks({
   required String repositoryOwner,
   required String repositoryName,
+  required String gitUserEmail,
+  required String gitUserName,
 }) {
   addFormatTask();
   addReleaseTask(
     repositoryOwner: repositoryOwner,
     repositoryName: repositoryName,
+  );
+  addOnReleasePrMergedTask(
+    gitUserEmail: gitUserEmail,
+    gitUserName: gitUserName,
   );
 }
 
@@ -56,6 +63,28 @@ void addReleaseTask({
           repositoryName: repositoryName,
         );
         log('プルリクを作成しました');
+      },
+    ),
+  );
+}
+
+void addOnReleasePrMergedTask({
+  required String gitUserEmail,
+  required String gitUserName,
+}) {
+  addTask(
+    GrinderTask(
+      'on-release-pr-merged',
+      description: 'Release PRがマージされたときのタスク',
+      taskFunction: () async {
+        run('git',
+            arguments: ['config', '--local', 'user.email', '"$gitUserEmail"']);
+        run('git',
+            arguments: ['config', '--local', 'user.name', '"$gitUserName"']);
+        _tag();
+        log('tagを打ちました');
+        await closeMilestone();
+        log('milestoneをcloseしました');
       },
     ),
   );
@@ -114,4 +143,37 @@ String _format() {
   );
 
   return result;
+}
+
+// Github Actions側でmasterをチェックアウトする前提
+void _tag() {
+  final pubspecFile = File('./pubspec.yaml');
+  final pubspecString = pubspecFile.readAsStringSync();
+
+  final pubspec = loadYaml(pubspecString);
+  final version = pubspec['version'] as String;
+
+  // 現在のバージョンでタグを打つ
+  run('git', arguments: ['tag', version]);
+  // リモートに反映
+  run('git', arguments: ['push', 'origin', version]);
+}
+
+// milestoneをcloseする
+Future<void> closeMilestone() async {
+  final envVars = Platform.environment;
+  final githubToken = envVars['GITHUB_TOKEN'];
+  final repository = envVars['REPO'];
+  final milestoneNumber = envVars['MILESTONE_NUMBER'];
+  final result = await http.patch(
+    Uri.parse(
+        'https://api.github.com/repos/$repository/milestones/$milestoneNumber'),
+    headers: {
+      'Authorization': 'token $githubToken',
+      'Accept': 'application/vnd.github.v3+json',
+    },
+    body: '{"state":"closed"}',
+  );
+  log(result.statusCode.toString());
+  log(result.body);
 }
