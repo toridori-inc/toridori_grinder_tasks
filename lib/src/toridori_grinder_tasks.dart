@@ -8,18 +8,13 @@ import 'package:yaml/yaml.dart';
 void addAllTasks({
   required String repositoryOwner,
   required String repositoryName,
-  required String gitUserEmail,
-  required String gitUserName,
 }) {
   addFormatTask();
   addReleaseTask(
     repositoryOwner: repositoryOwner,
     repositoryName: repositoryName,
   );
-  addOnReleasePrMergedTask(
-    gitUserEmail: gitUserEmail,
-    gitUserName: gitUserName,
-  );
+  addOnReleasePrMergedTask();
 }
 
 void addFormatTask() {
@@ -68,15 +63,16 @@ void addReleaseTask({
   );
 }
 
-void addOnReleasePrMergedTask({
-  required String gitUserEmail,
-  required String gitUserName,
-}) {
+void addOnReleasePrMergedTask() {
   addTask(
     GrinderTask(
       'on-release-pr-merged',
       description: 'Release PRがマージされたときのタスク',
       taskFunction: () async {
+        // 環境変数からgitのユーザー名とメールアドレスを取得
+        final envVars = Platform.environment;
+        final gitUserName = envVars['GIT_USER_NAME'];
+        final gitUserEmail = envVars['GIT_USER_EMAIL'];
         run('git',
             arguments: ['config', '--local', 'user.email', '"$gitUserEmail"']);
         run('git',
